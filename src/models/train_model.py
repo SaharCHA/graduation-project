@@ -95,15 +95,45 @@ def train_and_evaluate(features_path="data/processed/features.joblib", k_cluster
     # DBSCAN (після PCA — параметри підібрані для 50-вимірного простору)
     # ------------------------------------------------------------------ #
     print("\n" + "=" * 60)
-    print("DBSCAN (eps=3.0, min_samples=5, після PCA-50)")
+    print("DBSCAN (автопідбір eps через k-відстані, після PCA-50)")
     print("=" * 60)
-    dbscan = DBSCAN(eps=3.0, min_samples=5, metric='euclidean', n_jobs=-1)
+
+    from sklearn.neighbors import NearestNeighbors
+    MIN_SAMPLES = 5
+    nbrs = NearestNeighbors(n_neighbors=MIN_SAMPLES, metric='euclidean', n_jobs=-1).fit(X_pca)
+    distances, _ = nbrs.kneighbors(X_pca)
+    k_distances = np.sort(distances[:, -1])
+
+    # Знаходимо "лікоть" k-distance графіку — максимальна кривизна
+    diffs = np.diff(k_distances)
+    knee_idx = int(np.argmax(diffs))
+    auto_eps = float(k_distances[knee_idx])
+    auto_eps = round(max(auto_eps, 0.3), 4)
+    print(f" Автоматично визначений eps = {auto_eps}")
+
+    dbscan = DBSCAN(eps=auto_eps, min_samples=MIN_SAMPLES, metric='euclidean', n_jobs=-1)
     dbscan_labels = dbscan.fit_predict(X_pca)
 
     unique_labels = set(dbscan_labels)
     n_clusters_db = len(unique_labels - {-1})
     n_noise = int((dbscan_labels == -1).sum())
     print(f" Знайдено кластерів: {n_clusters_db} | Шумових точок: {n_noise} ({n_noise/len(dbscan_labels)*100:.1f}%)")
+
+    # Якщо автопідбір дав ≤1 кластер — пробуємо менший eps
+    if n_clusters_db <= 1:
+        for fallback_eps in [auto_eps * 0.5, auto_eps * 0.3, 0.5, 0.3]:
+            fallback_eps = round(fallback_eps, 4)
+            print(f" Резервний запуск з eps={fallback_eps}...")
+            dbscan = DBSCAN(eps=fallback_eps, min_samples=MIN_SAMPLES, metric='euclidean', n_jobs=-1)
+            dbscan_labels = dbscan.fit_predict(X_pca)
+            n_clusters_db = len(set(dbscan_labels) - {-1})
+            n_noise = int((dbscan_labels == -1).sum())
+            auto_eps = fallback_eps
+            print(f"  → кластерів: {n_clusters_db}, шуму: {n_noise}")
+            if n_clusters_db > 1:
+                break
+
+    print(f" Фінальний eps={auto_eps} | Кластерів: {n_clusters_db} | Шум: {n_noise}")
 
     if n_clusters_db > 1:
         mask = dbscan_labels != -1

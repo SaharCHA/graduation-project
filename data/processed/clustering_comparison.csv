@@ -1,4 +1,4 @@
 ﻿Алгоритм,Silhouette Score,Davies-Bouldin Index,Calinski-Harabasz Index,Кількість кластерів
 K-Means,0.0671,2.6428,1058.73,15.0
-DBSCAN,,,,1.0
+DBSCAN,0.4482,0.499,56.16,3.0
 Hierarchical (Ward),0.0978,1.7132,1011.52,15.0
